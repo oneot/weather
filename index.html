@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#b8dff3">
-  <title>오늘의 날씨</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='54' dominant-baseline='middle' text-anchor='middle' font-size='82'%3E%E2%98%80%EF%B8%8F%3C/text%3E%3C/svg%3E">
+  <title>Weather Agent</title>
   <style>
     :root {
       --ink: #0d2230;
@@ -183,6 +184,18 @@
       color: var(--ink); font-size: 13px; line-height: 1.6; max-height: 92px; overflow: auto;
     }
     .agent-reply.show { display: block; }
+    .typing-indicator { min-height: 25px; display: inline-flex; align-items: center; gap: 6px; padding: 1px 2px; }
+    .typing-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .42;
+      animation: typingBounce 1.05s cubic-bezier(.45,.05,.55,.95) infinite;
+      box-shadow: 0 2px 8px rgba(255,255,255,.16);
+    }
+    .typing-dot:nth-child(2) { animation-delay: .14s; }
+    .typing-dot:nth-child(3) { animation-delay: .28s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0) scale(.86); opacity: .38; }
+      30% { transform: translateY(-5px) scale(1.08); opacity: .9; }
+    }
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 18px); opacity: 0; pointer-events: none; z-index: 50; padding: 10px 15px; border-radius: 999px; background: rgba(12,29,40,.76); color: white; backdrop-filter: blur(16px); transition: .25s; font-size: 12px; }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
@@ -234,7 +247,7 @@
         <section class="weather-panel" aria-labelledby="locationTitle">
           <div class="summary">
             <div>
-              <div class="date-line"><span id="dateLabel">오늘</span> · <span id="dataLabel">단기예보</span> · <span id="selectedTimeText">18:00</span></div>
+              <div class="date-line"><span id="dateLabel">실시간 관측</span> · <span id="selectedTimeText">18:00</span></div>
               <h1 class="location-line" id="locationTitle">서울</h1>
               <div class="temperature-row"><span class="temperature" id="mainTemperature">--</span><span class="degree-mark">°</span></div>
             </div>
@@ -257,14 +270,13 @@
           </div>
           <div class="recommendations">
             <span class="recommendation">우산 <b id="umbrellaInsight">불필요</b></span>
-            <span class="recommendation">추천 출발 <b id="departInsight">19:00</b></span>
             <span class="recommendation">습도 <b id="humidityInsight">60%</b></span>
             <span class="recommendation">바람 <b id="windInsight">1.8m/s</b></span>
           </div>
         </section>
 
         <form class="prompt-dock" id="assistantForm">
-          <input id="promptInput" autocomplete="off" aria-label="날씨 질문">
+          <input id="promptInput" autocomplete="off" placeholder="날씨 관련 무엇이든 물어보세요 😎" aria-label="날씨 질문">
           <button id="sendButton" type="submit" aria-label="질문 보내기">→</button>
         </form>
         <div class="agent-reply" id="assistantReply" role="status" aria-live="polite"></div>
@@ -421,10 +433,10 @@
     function renderSelectedWeather(updateLens = true) {
       const item = state.hours[state.selectedIndex]; if (!item) return;
       $("#selectedTimeText").textContent = item.time;
-      $("#dataLabel").textContent = item.sourceType === "observation" || state.dataType === "observation" ? "실제 관측" : "단기예보";
+      $("#dateLabel").textContent = "실시간 관측";
       if (item.pending) {
         $("#mainTemperature").textContent = "--"; $("#conditionIcon").textContent = "···"; $("#conditionName").textContent = "기상청 데이터 연결 중"; $("#feelsLike").textContent = "--°";
-        $("#highTemp").textContent = "--°"; $("#lowTemp").textContent = "--°"; $("#umbrellaInsight").textContent = "확인 중"; $("#departInsight").textContent = "--:--"; $("#humidityInsight").textContent = "--%"; $("#windInsight").textContent = "--m/s";
+        $("#highTemp").textContent = "--°"; $("#lowTemp").textContent = "--°"; $("#umbrellaInsight").textContent = "확인 중"; $("#humidityInsight").textContent = "--%"; $("#windInsight").textContent = "--m/s";
         $("#timelineShell").setAttribute("aria-valuetext", `${item.time}, 데이터 불러오는 중`); return;
       }
       $("#mainTemperature").textContent = Math.round(item.temperature);
@@ -434,7 +446,7 @@
       const temps = state.hours.map(h => Number(h.temperature));
       $("#highTemp").textContent = `${Math.max(...temps)}°`; $("#lowTemp").textContent = `${Math.min(...temps)}°`;
       $("#umbrellaInsight").textContent = item.rainChance >= 50 ? "필요" : item.rainChance >= 30 ? "챙기면 안심" : "불필요";
-      $("#departInsight").textContent = findBestDeparture(); $("#humidityInsight").textContent = `${item.humidity}%`; $("#windInsight").textContent = `${item.wind}m/s`;
+      $("#humidityInsight").textContent = `${item.humidity}%`; $("#windInsight").textContent = `${item.wind}m/s`;
       $("#timelineShell").setAttribute("aria-valuetext", `${item.time}, ${item.temperature}도, ${names[item.condition]}`);
       syncScene(item);
     }
@@ -445,8 +457,6 @@
       const night = item.hour >= 20 || item.hour < 6;
       document.body.classList.toggle("night", night); document.body.classList.toggle("dark-ui", night || sceneName === "rainy");
     }
-
-    function findBestDeparture() { const best = state.hours.slice(state.selectedIndex).reduce((a,b) => a.rainChance <= b.rainChance ? a : b); return best.time; }
 
     function bindLiquidDrag() {
       const shell = $("#timelineShell"); let startX = 0, lastX = 0, lastT = 0;
@@ -476,7 +486,7 @@
 
     function setContext(location, dateLabel = "오늘", dataType = "forecast") {
       state.location = location || "서울"; state.dateLabel = dateLabel; state.dataType = dataType; state.hours = pendingWeather(); state.selectedIndex = dateLabel === "오늘" ? new Date().getHours() : 0;
-      $("#topLocation").textContent = state.location; $("#locationTitle").textContent = state.location; $("#dateLabel").textContent = state.dateLabel;
+      $("#topLocation").textContent = state.location; $("#locationTitle").textContent = state.location; $("#dateLabel").textContent = "실시간 관측";
       $("#timeRange").max = state.hours.length - 1; $("#timelineShell").setAttribute("aria-valuemax", state.hours.length - 1); renderTimeline();
     }
 
@@ -539,7 +549,7 @@
       const tableData = parseForecastTable(text); if (tableData) return applyStructuredWeather(tableData);
       const observation = parseSingleObservation(text); if (observation) return applyStructuredWeather(observation);
       const location = findLocation(text); const dateLabel = /어제|관측자료|실제 관측/.test(text) ? "조회 시각" : /내일/.test(text) ? "내일" : "오늘";
-      if (location) { state.location = location; state.dateLabel = dateLabel; $("#topLocation").textContent = location; $("#locationTitle").textContent = location; $("#dateLabel").textContent = dateLabel; }
+      if (location) { state.location = location; state.dateLabel = dateLabel; $("#topLocation").textContent = location; $("#locationTitle").textContent = location; $("#dateLabel").textContent = "실시간 관측"; }
     }
     function parseWeatherUiBlock(text) { const match = text.match(/```weather-ui\s*([\s\S]*?)```/i); if (!match) return null; try { return JSON.parse(match[1]); } catch { return null; } }
     function parseForecastTable(text) {
@@ -563,7 +573,7 @@
       if (!Array.isArray(data.hours) || !data.hours.length) return false; state.location = data.location || state.location; state.dateLabel = data.dateLabel || "오늘"; state.dataType = data.dataType || "forecast";
       state.hours = data.hours.slice(0,24).map(h => ({ hour: Number(String(h.time).slice(0,2)), time: h.time, temperature: Number(h.temperature), humidity: Number(h.humidity ?? 60), wind: Number(h.wind ?? 0).toFixed(1), rainChance: Number(h.rainChance ?? 0), condition: h.condition || "cloudy", sourceType: h.sourceType || "forecast" }));
       state.selectedIndex = state.pendingHour === null ? 0 : state.hours.reduce((best,item,index) => Math.abs(item.hour-state.pendingHour) < Math.abs(state.hours[best].hour-state.pendingHour) ? index : best,0); state.pendingHour = null;
-      $("#topLocation").textContent = state.location; $("#locationTitle").textContent = state.location; $("#dateLabel").textContent = state.dateLabel; $("#timeRange").max = state.hours.length - 1; $("#timelineShell").setAttribute("aria-valuemax", state.hours.length - 1); renderTimeline();
+      $("#topLocation").textContent = state.location; $("#locationTitle").textContent = state.location; $("#dateLabel").textContent = "실시간 관측"; $("#timeRange").max = state.hours.length - 1; $("#timelineShell").setAttribute("aria-valuemax", state.hours.length - 1); renderTimeline();
       state.weatherReady = true;
       setTimeout(completeLoading, 420); return true;
     }
@@ -638,10 +648,11 @@
     function findLocation(text) { return ["서울","부산","인천","수원","춘천","강릉","속초","청주","충주","대전","세종","전주","군산","광주","목포","여수","울산","대구","포항","안동","창원","진주","통영","제주","서귀포","해운대"].find(location => text.includes(location)); }
     function parseRequestedHour(text) { if (/저녁|퇴근/.test(text)) return 19; if (/점심/.test(text)) return 12; if (/아침|출근/.test(text)) return 8; const match = text.match(/(오전|오후)?\s*(\d{1,2})\s*시/); if (!match) return null; let hour = Number(match[2]); if (match[1] === "오후" && hour < 12) hour += 12; if (match[1] === "오전" && hour === 12) hour = 0; return hour; }
     function getUserId() { if (state.userId) return state.userId; let id = localStorage.getItem("weatherUserId"); if (!id || !id.startsWith("dl_")) { const unique = crypto.randomUUID ? crypto.randomUUID().replaceAll("-", "") : `${Date.now()}${Math.random().toString(16).slice(2)}`; id = `dl_${unique}`; localStorage.setItem("weatherUserId", id); } return id; }
+    function showTypingIndicator() { const box = $("#assistantReply"); box.innerHTML = `<span class="typing-indicator" role="status" aria-label="에이전트가 답변을 작성하고 있습니다"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></span>`; box.classList.add("show"); }
     function showReply(text) { const box = $("#assistantReply"); box.textContent = text.replace(/```weather-ui[\s\S]*?```/gi,"").trim(); box.classList.add("show"); }
     function showToast(message) { const toast = $("#toast"); toast.textContent = message; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"),2200); }
 
-    $("#assistantForm").addEventListener("submit", event => { event.preventDefault(); const input = $("#promptInput"); const text = input.value.trim(); if (!text) return; showReply(`“${text}” 확인 중…`); input.value = ""; sendPrompt(text); });
+    $("#assistantForm").addEventListener("submit", event => { event.preventDefault(); const input = $("#promptInput"); const text = input.value.trim(); if (!text) return; input.placeholder = ""; showTypingIndicator(); input.value = ""; sendPrompt(text); });
     $("#loaderRetry").addEventListener("click", retryInitialWeather);
     $("#locationButton").addEventListener("click", () => { setContext("서울","오늘","forecast"); loadInitialWeather(true); showToast("서울 · 현재 기상청 데이터를 다시 조회합니다"); });
     window.addEventListener("resize", () => selectHour(state.selectedIndex, false));
