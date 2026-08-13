@@ -52,22 +52,26 @@
     body.dark-ui { --ink: #f8fbff; --ink-soft: rgba(248,251,255,.68); }
     body.dark-ui .scene-shade { background: linear-gradient(180deg, rgba(2,12,22,.16), rgba(2,12,22,.05) 42%, rgba(2,12,22,.38)); }
 
-    .weather-particles { position: fixed; inset: -20% 0 0; pointer-events: none; z-index: -1; opacity: 0; transition: opacity .5s; }
-    .weather-particles.rain-on {
-      opacity: .32;
-      background-image: repeating-linear-gradient(104deg, transparent 0 54px, rgba(255,255,255,.46) 55px 56px, transparent 57px 94px);
-      background-size: 210px 260px;
-      animation: rainFall 1.25s linear infinite;
+    .weather-loader {
+      position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow: hidden;
+      background: linear-gradient(145deg, #eadde1 0%, #e6dcdf 46%, #e2d6db 100%);
+      color: #272328; transition: opacity 1s cubic-bezier(.22,.8,.2,1), visibility 1s;
     }
-    .weather-particles.snow-on {
-      opacity: .72;
-      background-image: radial-gradient(circle, white 0 2px, transparent 2.5px), radial-gradient(circle, white 0 1px, transparent 1.5px);
-      background-position: 0 0, 55px 80px;
-      background-size: 120px 140px, 90px 110px;
-      animation: snowFall 8s linear infinite;
-    }
-    @keyframes rainFall { to { transform: translate3d(-38px, 180px, 0); } }
-    @keyframes snowFall { to { transform: translate3d(25px, 170px, 0); } }
+    .weather-loader::before { content: ""; position: absolute; width: 68vmax; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.34), transparent 64%); filter: blur(26px); }
+    .weather-loader.is-complete { opacity: 0; visibility: hidden; pointer-events: none; }
+    .weather-loader-inner { position: relative; width: min(90vw, 520px); text-align: center; transform: translateY(-1vh); }
+    .loader-orb-wrap { position: relative; width: clamp(260px, 44vw, 410px); aspect-ratio: 1; margin: 0 auto 34px; filter: drop-shadow(0 32px 34px rgba(91,57,86,.14)); }
+    .loader-canvas { display: block; width: 100%; height: 100%; }
+    .loader-title { margin: 0; font-size: clamp(22px, 3vw, 31px); font-weight: 620; letter-spacing: -.04em; }
+    .loader-description { margin: 11px auto 0; max-width: 330px; color: rgba(39,35,40,.5); font-size: 13px; line-height: 1.65; }
+    .loader-dots::after { content: ""; display: inline-block; width: 1.4em; text-align: left; animation: loaderDots 1.35s steps(4,end) infinite; }
+    .loader-retry { display: none; margin: 25px auto 0; padding: 12px 24px; border: 1px solid rgba(39,35,40,.12); border-radius: 999px; background: rgba(255,255,255,.36); backdrop-filter: blur(18px); color: #272328; cursor: pointer; }
+    .weather-loader.has-error .loader-retry { display: inline-flex; }
+    .weather-loader.has-error .loader-canvas { opacity: .52; filter: grayscale(.35); }
+    body.is-loading .page { opacity: 0; transform: translateY(16px) scale(.985); }
+    .page { transition: opacity .8s ease .15s, transform .9s cubic-bezier(.22,.8,.2,1) .15s; }
+    @keyframes loaderDots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75%,100% { content: "..."; } }
+    @media (prefers-reduced-motion: reduce) { .loader-dots::after { animation: none !important; } }
 
     .page { width: min(1180px, 100%); min-height: 100svh; margin: 0 auto; padding: 24px 28px 30px; display: flex; flex-direction: column; }
     .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 50px; }
@@ -202,15 +206,23 @@
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; } }
   </style>
 </head>
-<body>
+<body class="is-loading">
   <div class="scene-stack" aria-hidden="true">
     <div class="scene sunny active" data-scene="sunny"></div>
     <div class="scene cloudy" data-scene="cloudy"></div>
     <div class="scene rainy" data-scene="rainy"></div>
     <div class="scene-shade"></div>
   </div>
-  <div class="weather-particles" id="weatherParticles" aria-hidden="true"></div>
-
+  <section class="weather-loader" id="weatherLoader" role="status" aria-live="polite" aria-label="날씨 정보 불러오는 중">
+    <div class="weather-loader-inner">
+      <div class="loader-orb-wrap" aria-hidden="true">
+        <canvas class="loader-canvas" id="loaderCanvas"></canvas>
+      </div>
+      <h1 class="loader-title" id="loaderTitle">날씨 정보 가져오는 중<span class="loader-dots"></span></h1>
+      <p class="loader-description" id="loaderDescription">기상청 관측과 시간별 예보를 확인하고 있어요.</p>
+      <button class="loader-retry" id="loaderRetry" type="button">다시 시도</button>
+    </div>
+  </section>
   <div class="page">
     <header class="topbar">
       <button class="place-button" id="locationButton" type="button" aria-label="서울 현재 날씨로 돌아가기">⌖ <span id="topLocation">서울</span></button>
@@ -227,13 +239,13 @@
             <div>
               <div class="date-line"><span id="dateLabel">오늘</span> · <span id="dataLabel">단기예보</span> · <span id="selectedTimeText">18:00</span></div>
               <h1 class="location-line" id="locationTitle">서울</h1>
-              <div class="temperature-row"><span class="temperature" id="mainTemperature">24</span><span class="degree-mark">°</span></div>
+              <div class="temperature-row"><span class="temperature" id="mainTemperature">--</span><span class="degree-mark">°</span></div>
             </div>
             <div class="condition-block">
-              <div class="condition-icon" id="conditionIcon">☀︎</div>
-              <div class="condition-name" id="conditionName">맑음</div>
-              <div class="feels">체감 <span id="feelsLike">23°</span></div>
-              <div class="hi-low"><span class="mini-pill">↑ <span id="highTemp">28°</span></span><span class="mini-pill">↓ <span id="lowTemp">19°</span></span></div>
+              <div class="condition-icon" id="conditionIcon">···</div>
+              <div class="condition-name" id="conditionName">기상청 데이터 연결 중</div>
+              <div class="feels">체감 <span id="feelsLike">--°</span></div>
+              <div class="hi-low"><span class="mini-pill">↑ <span id="highTemp">--°</span></span><span class="mini-pill">↓ <span id="lowTemp">--°</span></span></div>
             </div>
           </div>
 
@@ -269,30 +281,82 @@
     /* Azure Function의 Direct Line token 발급 주소를 입력하세요. */
     const TOKEN_ENDPOINT = "https://weather-agent-joowon-c0gfe7d3ggfmf2f0.koreacentral-01.azurewebsites.net/api/directline-token";
 
-    const state = { location: "서울", dateLabel: "오늘", dataType: "forecast", selectedIndex: 0, connected: false, directLine: null, subscription: null, userId: null, pendingHour: null, hours: [], lensX: 0, dragging: false };
+    const state = { location: "서울", dateLabel: "오늘", dataType: "forecast", selectedIndex: 0, connected: false, directLine: null, subscription: null, userId: null, pendingHour: null, initialRequested: false, loadingTimer: null, hours: [], lensX: 0, dragging: false };
     const $ = selector => document.querySelector(selector);
     const pad = n => String(n).padStart(2, "0");
     const symbols = { clear: "☀︎", cloudy: "☁︎", rain: "☂︎", shower: "☂︎", snow: "❄︎" };
     const names = { clear: "맑음", cloudy: "흐림", rain: "비", shower: "소나기", snow: "눈" };
+    let loaderAnimationFrame = 0;
 
-    function seededWeather(location = "서울") {
-      const now = new Date();
-      const seed = [...location].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    function blobPath(ctx, cx, cy, radius, time, inset = 0) {
+      const points = 120; ctx.beginPath();
+      for (let i = 0; i <= points; i++) {
+        const angle = i / points * Math.PI * 2;
+        const pulse = 1 + Math.sin(time * 1.08) * .035 + Math.sin(time * .47 + 1.8) * .018;
+        const travellingWave = Math.sin(angle * 2 - time * 1.18) * .062 + Math.sin(angle * 3 + time * .91) * .042 + Math.sin(angle * 5 - time * .62) * .024 + Math.sin(angle * 7 + time * 1.42) * .011;
+        const wobble = pulse + travellingWave;
+        const stretchX = 1 + Math.sin(time * .72) * .055 + Math.sin(time * .31) * .02;
+        const stretchY = 1 - Math.sin(time * .72) * .04 + Math.cos(time * .43) * .018;
+        const rr = Math.max(4, radius * wobble - inset); const x = cx + Math.cos(angle) * rr * stretchX; const y = cy + Math.sin(angle) * rr * stretchY;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    }
+
+    function drawLoaderBlob(milliseconds = 0) {
+      const canvas = $("#loaderCanvas"); const loader = $("#weatherLoader");
+      if (!canvas || loader.hidden || loader.classList.contains("is-complete")) return;
+      const size = Math.max(1, Math.round(canvas.clientWidth)); const dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (canvas.width !== size * dpr || canvas.height !== size * dpr) { canvas.width = size * dpr; canvas.height = size * dpr; }
+      const ctx = canvas.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, size, size);
+      const t = milliseconds / 1000;
+      const cx = size * (.5 + Math.sin(t * .58) * .026 + Math.sin(t * .21 + 1.4) * .012);
+      const cy = size * (.5 + Math.cos(t * .47) * .022 + Math.sin(t * .83) * .009);
+      const radius = size * (.335 + Math.sin(t * .88) * .012 + Math.sin(t * .37 + 2) * .008);
+
+      ctx.save(); ctx.filter = `blur(${size * .052}px)`; ctx.globalAlpha = .34;
+      const halo = ctx.createRadialGradient(cx, cy, radius * .2, cx, cy, radius * 1.32); halo.addColorStop(0, "rgba(255,255,255,.28)"); halo.addColorStop(.44, "rgba(186,129,255,.2)"); halo.addColorStop(.72, "rgba(93,210,255,.15)"); halo.addColorStop(1, "rgba(255,151,211,0)"); ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, radius * 1.35, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+
+      ctx.save(); ctx.shadowColor = "rgba(77,47,76,.22)"; ctx.shadowBlur = size * .07; ctx.shadowOffsetY = size * .035; blobPath(ctx, cx, cy, radius, t); ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fill(); ctx.restore();
+
+      ctx.save(); blobPath(ctx, cx, cy, radius, t); ctx.clip();
+      const base = ctx.createLinearGradient(cx-radius, cy-radius, cx+radius, cy+radius); base.addColorStop(0, "rgba(218,234,255,.38)"); base.addColorStop(.42, "rgba(255,255,255,.09)"); base.addColorStop(1, "rgba(255,211,232,.3)"); ctx.fillStyle = base; ctx.fillRect(cx-radius*1.3, cy-radius*1.3, radius*2.6, radius*2.6);
+      ctx.globalCompositeOperation = "screen";
+      const lights = [
+        [Math.sin(t*.91)*.46-.2, Math.cos(t*.73)*.42-.18, "rgba(68,170,255,.74)"],
+        [Math.cos(t*.79+1)*.48+.12, Math.sin(t*.66)*.44+.14, "rgba(238,83,223,.68)"],
+        [Math.sin(t*.62+2)*.46, Math.cos(t*.86+1)*.4+.2, "rgba(106,255,207,.62)"],
+        [Math.cos(t*.57+2)*.44, Math.sin(t*.81+3)*.42-.2, "rgba(255,194,92,.42)"]
+      ];
+      lights.forEach(([ox,oy,color], index) => { const gx = cx + ox*radius, gy = cy + oy*radius; const g = ctx.createRadialGradient(gx,gy,0,gx,gy,radius*(index===1?.86:.72)); g.addColorStop(0,color); g.addColorStop(.5,color.replace(/\.[0-9]+\)$/, ".18)")); g.addColorStop(1,"rgba(255,255,255,0)"); ctx.fillStyle=g; ctx.fillRect(cx-radius*1.2,cy-radius*1.2,radius*2.4,radius*2.4); });
+      ctx.globalCompositeOperation = "overlay"; ctx.globalAlpha = .38; ctx.filter = `blur(${size*.018}px)`;
+      for (let i=0;i<4;i++) { ctx.beginPath(); ctx.ellipse(cx + Math.sin(t*(.68+i*.08)+i)*radius*.27, cy + (i-1.5)*radius*.17 + Math.cos(t*.74+i)*radius*.09, radius*(.62+i*.045), radius*(.11+i*.018), -.55 + Math.sin(t*.57+i)*.38, 0, Math.PI*2); ctx.strokeStyle = i===1 ? "rgba(255,255,255,.62)" : "rgba(125,86,255,.32)"; ctx.lineWidth = size*(.022+i*.004); ctx.stroke(); }
+      ctx.restore();
+
+      ctx.save(); blobPath(ctx,cx,cy,radius,t); const edge = ctx.createConicGradient(t*.48,cx,cy); edge.addColorStop(0,"rgba(104,214,255,.92)"); edge.addColorStop(.22,"rgba(255,255,255,.94)"); edge.addColorStop(.43,"rgba(250,123,223,.88)"); edge.addColorStop(.66,"rgba(119,83,255,.86)"); edge.addColorStop(.84,"rgba(121,255,213,.8)"); edge.addColorStop(1,"rgba(104,214,255,.92)"); ctx.strokeStyle=edge; ctx.lineWidth=Math.max(1.5,size*.009); ctx.shadowColor="rgba(255,255,255,.7)"; ctx.shadowBlur=size*.02; ctx.stroke(); ctx.restore();
+      ctx.save(); blobPath(ctx,cx,cy,radius,t,size*.018); ctx.strokeStyle="rgba(255,255,255,.42)"; ctx.lineWidth=1; ctx.stroke(); ctx.restore();
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(Math.sin(t*.54)*.22); ctx.globalAlpha=.76; ctx.strokeStyle="rgba(255,255,255,.84)"; ctx.lineCap="round"; ctx.lineWidth=Math.max(1,size*.005); ctx.beginPath(); ctx.arc(-radius*.04,-radius*.01,radius*.55,3.45+t*.04,4.68+t*.04); ctx.stroke(); ctx.restore();
+
+      ctx.save(); ctx.globalCompositeOperation="screen";
+      for (let i=0;i<5;i++) { const a=t*(.72+i*.055)+i*1.27; const orbit=radius*(.54+i*.055); const px=cx+Math.cos(a)*orbit; const py=cy+Math.sin(a*1.13)*orbit*.72; const spark=ctx.createRadialGradient(px,py,0,px,py,size*(.014+i*.002)); spark.addColorStop(0,"rgba(255,255,255,.72)"); spark.addColorStop(.35,i%2?"rgba(255,135,231,.35)":"rgba(102,221,255,.38)"); spark.addColorStop(1,"rgba(255,255,255,0)"); ctx.fillStyle=spark; ctx.fillRect(px-size*.04,py-size*.04,size*.08,size*.08); }
+      ctx.restore();
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) loaderAnimationFrame = requestAnimationFrame(drawLoaderBlob);
+    }
+    function startLoaderAnimation() { cancelAnimationFrame(loaderAnimationFrame); loaderAnimationFrame = requestAnimationFrame(drawLoaderBlob); }
+
+    function pendingWeather() {
       return Array.from({ length: 24 }, (_, i) => {
         const hour = i;
-        const wave = Math.round(20 + Math.sin((hour - 8) / 12 * Math.PI) * 8 + (seed % 3));
-        const rainChance = Math.max(0, Math.min(80, 10 + ((seed + i * 13) % 8) * 10 - (i > 7 ? 20 : 0)));
-        const condition = rainChance >= 60 ? "rain" : rainChance >= 35 ? "cloudy" : "clear";
-        return { hour, time: `${pad(hour)}:00`, temperature: wave, humidity: Math.max(42, 68 + (rainChance > 50 ? 15 : 0) - i), wind: (1 + ((seed + i * 7) % 24) / 10).toFixed(1), rainChance, condition };
+        return { hour, time: `${pad(hour)}:00`, temperature: null, humidity: null, wind: null, rainChance: null, condition: "cloudy", pending: true };
       });
     }
 
     function renderTimeline() {
       $("#timelineShell").style.setProperty("--count", state.hours.length);
       $("#timelineItems").innerHTML = state.hours.map((item, index) => `
-        <button class="hour-item" type="button" data-index="${index}" tabindex="-1" aria-label="${item.time}, ${item.temperature}도, 강수확률 ${item.rainChance}%">
-          <span class="hour-time">${item.time}</span><span class="hour-icon">${symbols[item.condition]}</span>
-          <span class="hour-temp">${item.temperature}°</span><span class="hour-rain">${item.rainChance}%</span>
+        <button class="hour-item" type="button" data-index="${index}" tabindex="-1" aria-label="${item.pending ? `${item.time}, 데이터 불러오는 중` : `${item.time}, ${item.temperature}도, 강수확률 ${item.rainChance}%`}">
+          <span class="hour-time">${item.time}</span><span class="hour-icon">${item.pending ? "·" : symbols[item.condition]}</span>
+          <span class="hour-temp">${item.pending ? "--°" : `${item.temperature}°`}</span><span class="hour-rain">${item.pending ? "--%" : `${item.rainChance}%`}</span>
         </button>`).join("");
       $("#timelineItems").querySelectorAll(".hour-item").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); selectHour(Number(button.dataset.index)); }));
       requestAnimationFrame(() => selectHour(state.selectedIndex, false));
@@ -332,6 +396,12 @@
       const item = state.hours[state.selectedIndex]; if (!item) return;
       $("#selectedTimeText").textContent = item.time;
       $("#dataLabel").textContent = state.dataType === "observation" ? "실제 관측" : "단기예보";
+      if (item.pending) {
+        $("#mainTemperature").textContent = "--"; $("#conditionIcon").textContent = "···"; $("#conditionName").textContent = "기상청 데이터 연결 중"; $("#feelsLike").textContent = "--°";
+        $("#highTemp").textContent = "--°"; $("#lowTemp").textContent = "--°"; $("#umbrellaInsight").textContent = "확인 중"; $("#departInsight").textContent = "--:--"; $("#humidityInsight").textContent = "--%"; $("#windInsight").textContent = "--m/s";
+        $("#lensContent").innerHTML = `<span class="lens-time">${item.time}</span><span class="lens-icon">·</span><span class="lens-temp">--°</span><span class="lens-rain">--%</span>`;
+        $("#timelineShell").setAttribute("aria-valuetext", `${item.time}, 데이터 불러오는 중`); return;
+      }
       $("#mainTemperature").textContent = Math.round(item.temperature);
       $("#conditionIcon").textContent = symbols[item.condition];
       $("#conditionName").textContent = names[item.condition];
@@ -351,9 +421,6 @@
       document.querySelectorAll(".scene").forEach(scene => scene.classList.toggle("active", scene.dataset.scene === sceneName));
       const night = item.hour >= 20 || item.hour < 6;
       document.body.classList.toggle("night", night); document.body.classList.toggle("dark-ui", night || sceneName === "rainy");
-      const particles = $("#weatherParticles"); particles.className = "weather-particles";
-      if (item.condition === "rain" || item.condition === "shower") particles.classList.add("rain-on");
-      if (item.condition === "snow") particles.classList.add("snow-on");
     }
 
     function findBestDeparture() { const best = state.hours.slice(state.selectedIndex).reduce((a,b) => a.rainChance <= b.rainChance ? a : b); return best.time; }
@@ -385,13 +452,13 @@
     }
 
     function setContext(location, dateLabel = "오늘", dataType = "forecast") {
-      state.location = location || "서울"; state.dateLabel = dateLabel; state.dataType = dataType; state.hours = seededWeather(state.location); state.selectedIndex = dateLabel === "오늘" ? new Date().getHours() : 0;
+      state.location = location || "서울"; state.dateLabel = dateLabel; state.dataType = dataType; state.hours = pendingWeather(); state.selectedIndex = dateLabel === "오늘" ? new Date().getHours() : 0;
       $("#topLocation").textContent = state.location; $("#locationTitle").textContent = state.location; $("#dateLabel").textContent = state.dateLabel;
       $("#timeRange").max = state.hours.length - 1; $("#timelineShell").setAttribute("aria-valuemax", state.hours.length - 1); renderTimeline();
     }
 
     async function connectAgent() {
-      if (!TOKEN_ENDPOINT || TOKEN_ENDPOINT.includes("YOUR-")) return setConnection(false, "데모 모드");
+      if (!TOKEN_ENDPOINT || TOKEN_ENDPOINT.includes("YOUR-")) { setConnection(false, "연결 설정 필요"); return showLoadingError("Azure Function 주소가 설정되지 않았습니다."); }
       setConnection(false, "에이전트 연결 중");
       try {
         const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 12000);
@@ -405,17 +472,36 @@
         state.directLine = window.WebChat.createDirectLine({ token });
         state.subscription = state.directLine.activity$.subscribe({
           next: activity => { const isBot = activity.from?.role === "bot" || (activity.from?.id && activity.from.id !== state.userId); if (activity.type === "message" && isBot) receiveAgentActivity(activity); },
-          error: error => { console.warn("Direct Line stream error", error); setConnection(false, "연결 끊김"); $("#sendButton").disabled = false; }
+          error: error => { console.warn("Direct Line stream error", error); setConnection(false, "연결 끊김"); $("#sendButton").disabled = false; if (document.body.classList.contains("is-loading")) showLoadingError("에이전트 연결이 중단됐습니다."); }
         });
         setConnection(true, "에이전트 연결됨");
-      } catch (error) { console.warn("Direct Line 연결 실패", error); setConnection(false, "연결 실패"); showToast("에이전트 연결에 실패했습니다"); }
+        if (!state.initialRequested) { state.initialRequested = true; state.pendingHour = new Date().getHours(); setTimeout(requestInitialWeather, 250); }
+      } catch (error) { console.warn("Direct Line 연결 실패", error); setConnection(false, "연결 실패"); showLoadingError("에이전트에 연결하지 못했습니다."); }
     }
     function setConnection(online, label) { state.connected = online; $("#statusDot").classList.toggle("online", online); $("#connectionLabel").textContent = label; }
+    function completeLoading() {
+      clearTimeout(state.loadingTimer); state.loadingTimer = null;
+      cancelAnimationFrame(loaderAnimationFrame);
+      const loader = $("#weatherLoader"); loader.classList.remove("has-error"); loader.classList.add("is-complete"); document.body.classList.remove("is-loading");
+      setTimeout(() => { loader.hidden = true; }, 1000);
+    }
+    function showLoadingError(message) {
+      clearTimeout(state.loadingTimer); state.loadingTimer = null;
+      cancelAnimationFrame(loaderAnimationFrame);
+      const loader = $("#weatherLoader"); loader.hidden = false; loader.classList.remove("is-complete"); loader.classList.add("has-error");
+      $("#loaderTitle").textContent = "날씨 정보를 불러오지 못했어요"; $("#loaderDescription").textContent = message || "잠시 후 다시 시도해 주세요.";
+    }
+    function retryInitialWeather() {
+      const loader = $("#weatherLoader"); loader.hidden = false; loader.classList.remove("is-complete", "has-error"); document.body.classList.add("is-loading");
+      $("#loaderTitle").innerHTML = `날씨 정보 가져오는 중<span class="loader-dots"></span>`; $("#loaderDescription").textContent = "기상청 관측과 시간별 예보를 확인하고 있어요.";
+      startLoaderAnimation();
+      setContext("서울", "오늘", "forecast"); state.pendingHour = new Date().getHours(); if (state.connected) requestInitialWeather(); else { state.initialRequested = false; connectAgent(); }
+    }
 
     async function sendPrompt(text) {
       if (state.connected && state.directLine) {
         $("#sendButton").disabled = true;
-        state.pendingHour = parseRequestedHour(text);
+        const requestedHour = parseRequestedHour(text); if (requestedHour !== null) state.pendingHour = requestedHour;
         try {
           await state.directLine.postActivity({ type: "message", from: { id: getUserId(), name: "날씨 사용자" }, text, locale: "ko-KR", channelData: { clientContext: { location: state.location, dateLabel: state.dateLabel, selectedTime: state.hours[state.selectedIndex]?.time } } }).toPromise();
         } catch (error) {
@@ -429,8 +515,9 @@
     function applyAgentContext(text, channelData = {}) {
       const structured = channelData?.weatherUi || parseWeatherUiBlock(text); if (structured) return applyStructuredWeather(structured);
       const tableData = parseForecastTable(text); if (tableData) return applyStructuredWeather(tableData);
+      const observation = parseSingleObservation(text); if (observation) return applyStructuredWeather(observation);
       const location = findLocation(text); const dateLabel = /어제|관측자료|실제 관측/.test(text) ? "조회 시각" : /내일/.test(text) ? "내일" : "오늘";
-      if (location) setContext(location, dateLabel, /관측/.test(text) ? "observation" : "forecast");
+      if (location) { state.location = location; state.dateLabel = dateLabel; $("#topLocation").textContent = location; $("#locationTitle").textContent = location; $("#dateLabel").textContent = dateLabel; }
     }
     function parseWeatherUiBlock(text) { const match = text.match(/```weather-ui\s*([\s\S]*?)```/i); if (!match) return null; try { return JSON.parse(match[1]); } catch { return null; } }
     function parseForecastTable(text) {
@@ -442,18 +529,26 @@
       }
       return rows.length < 2 ? null : { location, dateLabel, dataType: /관측/.test(text) ? "observation" : "forecast", hours: rows };
     }
+    function parseSingleObservation(text) {
+      if (!/관측|기온/.test(text)) return null;
+      const temperature = text.match(/(?:기온|현재\s*기온)\s*[:：]?\s*(-?\d+(?:\.\d+)?)\s*℃/); if (!temperature) return null;
+      const timeMatch = text.match(/(?:오전|오후)?\s*(\d{1,2})(?::(\d{2}))?\s*시/) || text.match(/\b(\d{1,2}):(\d{2})\b/); const hour = timeMatch ? Number(timeMatch[1]) : new Date().getHours();
+      const humidity = text.match(/습도\s*[:：]?\s*(\d{1,3}(?:\.\d+)?)\s*%/); const wind = text.match(/(?:풍속|바람)[^\d]{0,12}(\d+(?:\.\d+)?)\s*m\/s/i); const rain = text.match(/(?:강수량|시간강수량)\s*[:：]?\s*(-?\d+(?:\.\d+)?)\s*mm/i);
+      const condition = /눈/.test(text) ? "snow" : /소나기/.test(text) ? "shower" : rain && Number(rain[1]) > 0 ? "rain" : /맑/.test(text) ? "clear" : "cloudy";
+      return { location: findLocation(text) || state.location, dateLabel: "조회 시각", dataType: "observation", hours: [{ time: `${pad(hour)}:00`, temperature: Number(temperature[1]), humidity: humidity ? Number(humidity[1]) : 0, wind: wind ? Number(wind[1]) : 0, rainChance: rain && Number(rain[1]) > 0 ? 100 : 0, condition }] };
+    }
     function applyStructuredWeather(data) {
-      if (!Array.isArray(data.hours) || !data.hours.length) return; state.location = data.location || state.location; state.dateLabel = data.dateLabel || "오늘"; state.dataType = data.dataType || "forecast";
+      if (!Array.isArray(data.hours) || !data.hours.length) return false; state.location = data.location || state.location; state.dateLabel = data.dateLabel || "오늘"; state.dataType = data.dataType || "forecast";
       state.hours = data.hours.slice(0,24).map(h => ({ hour: Number(String(h.time).slice(0,2)), time: h.time, temperature: Number(h.temperature), humidity: Number(h.humidity ?? 60), wind: Number(h.wind ?? 0).toFixed(1), rainChance: Number(h.rainChance ?? 0), condition: h.condition || "cloudy" }));
       state.selectedIndex = state.pendingHour === null ? 0 : state.hours.reduce((best,item,index) => Math.abs(item.hour-state.pendingHour) < Math.abs(state.hours[best].hour-state.pendingHour) ? index : best,0); state.pendingHour = null;
       $("#topLocation").textContent = state.location; $("#locationTitle").textContent = state.location; $("#dateLabel").textContent = state.dateLabel; $("#timeRange").max = state.hours.length - 1; $("#timelineShell").setAttribute("aria-valuemax", state.hours.length - 1); renderTimeline();
+      setTimeout(completeLoading, 420); return true;
     }
 
     function demoReply(text) {
-      const location = findLocation(text) || state.location; const dateLabel = /내일/.test(text) ? "내일" : /어제/.test(text) ? "어제" : "오늘"; const dataType = /어제|지난|과거/.test(text) ? "observation" : "forecast"; setContext(location, dateLabel, dataType);
-      const requestedHour = parseRequestedHour(text); if (requestedHour !== null) { const closest = state.hours.reduce((best,item,index) => Math.abs(item.hour-requestedHour) < Math.abs(state.hours[best].hour-requestedHour) ? index : best,0); selectHour(closest); }
-      const item = state.hours[state.selectedIndex]; setTimeout(() => showReply(`${location} ${dateLabel} ${item.time} 기준 ${item.temperature}℃, 강수확률 ${item.rainChance}%로 예상됩니다. 현재는 화면 확인용 데모 데이터입니다.`), 280);
+      showReply("기상청 데이터를 불러오려면 에이전트 연결이 필요합니다. 잠시 후 페이지를 새로고침해 주세요.");
     }
+    function requestInitialWeather() { clearTimeout(state.loadingTimer); state.loadingTimer = setTimeout(() => showLoadingError("기상청 응답이 평소보다 오래 걸리고 있습니다."), 40000); sendPrompt("지금 서울 날씨와 오늘 시간별 단기예보를 조회해줘. 화면이 읽을 수 있도록 각 시간은 반드시 'HH시 | 기온℃ | 하늘상태 | 강수형태 | 강수확률% | 습도% | 풍속m/s' 형식의 표로 작성해줘."); }
     function findLocation(text) { return ["서울","부산","인천","수원","춘천","강릉","속초","청주","충주","대전","세종","전주","군산","광주","목포","여수","울산","대구","포항","안동","창원","진주","통영","제주","서귀포","해운대"].find(location => text.includes(location)); }
     function parseRequestedHour(text) { if (/저녁|퇴근/.test(text)) return 19; if (/점심/.test(text)) return 12; if (/아침|출근/.test(text)) return 8; const match = text.match(/(오전|오후)?\s*(\d{1,2})\s*시/); if (!match) return null; let hour = Number(match[2]); if (match[1] === "오후" && hour < 12) hour += 12; if (match[1] === "오전" && hour === 12) hour = 0; return hour; }
     function getUserId() { if (state.userId) return state.userId; let id = localStorage.getItem("weatherUserId"); if (!id || !id.startsWith("dl_")) { const unique = crypto.randomUUID ? crypto.randomUUID().replaceAll("-", "") : `${Date.now()}${Math.random().toString(16).slice(2)}`; id = `dl_${unique}`; localStorage.setItem("weatherUserId", id); } return id; }
@@ -461,11 +556,12 @@
     function showToast(message) { const toast = $("#toast"); toast.textContent = message; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"),2200); }
 
     $("#assistantForm").addEventListener("submit", event => { event.preventDefault(); const input = $("#promptInput"); const text = input.value.trim(); if (!text) return; showReply(`“${text}” 확인 중…`); input.value = ""; sendPrompt(text); });
-    $("#locationButton").addEventListener("click", () => { setContext("서울","오늘","forecast"); showToast("서울 · 현재 기준으로 돌아왔습니다"); });
-    $("#nowButton").addEventListener("click", () => { setContext("서울","오늘","forecast"); showToast("현재 기준으로 돌아왔습니다"); });
+    $("#loaderRetry").addEventListener("click", retryInitialWeather);
+    $("#locationButton").addEventListener("click", () => { setContext("서울","오늘","forecast"); state.pendingHour = new Date().getHours(); if (state.connected) requestInitialWeather(); showToast("서울 · 현재 기상청 데이터를 다시 조회합니다"); });
+    $("#nowButton").addEventListener("click", () => { setContext("서울","오늘","forecast"); state.pendingHour = new Date().getHours(); if (state.connected) requestInitialWeather(); showToast("현재 기상청 데이터를 다시 조회합니다"); });
     window.addEventListener("resize", () => selectHour(state.selectedIndex, false));
     window.addEventListener("pagehide", () => state.subscription?.unsubscribe?.());
-    bindLiquidDrag(); setContext("서울","오늘","forecast"); connectAgent();
+    startLoaderAnimation(); bindLiquidDrag(); setContext("서울","오늘","forecast"); connectAgent();
   </script>
 </body>
 </html>
