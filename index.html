@@ -477,8 +477,9 @@
       const structured = channelData?.weatherUi || parseWeatherUiBlock(text); if (structured) return applyStructuredWeather(structured);
       const tableData = parseForecastTable(text); if (tableData) return applyStructuredWeather(tableData);
       const observation = parseSingleObservation(text); if (observation) return applyStructuredWeather(observation);
-      const location = findLocation(text); const dateLabel = /어제|관측자료|실제 관측/.test(text) ? "조회 시각" : /내일/.test(text) ? "내일" : "오늘";
-      if (location) { state.location = location; state.dateLabel = dateLabel; $("#topLocation").textContent = location; $("#locationTitle").textContent = location; $("#dateLabel").textContent = "실시간 관측"; }
+      // 답변에 지역명이 포함됐다는 이유만으로 화면을 바꾸지 않는다.
+      // 전체 날씨 화면은 시간별 수치가 포함된 검증 가능한 데이터가 있을 때만 갱신한다.
+      return false;
     }
     function parseWeatherUiBlock(text) { const match = text.match(/```weather-ui\s*([\s\S]*?)```/i); if (!match) return null; try { return JSON.parse(match[1]); } catch { return null; } }
     function parseForecastTable(text) {
