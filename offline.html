@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#b8dff3">
+  <title>오프라인 · Weather Agent</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif; color: #0d2230;
+      background: linear-gradient(#96d0f0, #d6f0fc); }
+    main { padding: 32px; max-width: 320px; }
+    h1 { font-size: 22px; margin: 12px 0 8px; }
+    p { margin: 0 0 20px; line-height: 1.6; color: rgba(13, 34, 48, .7); }
+    button { border: 0; border-radius: 999px; padding: 12px 24px; font: inherit; font-weight: 600;
+      background: #fff; color: #0d2230; box-shadow: 0 6px 20px rgba(21, 46, 62, .15); }
+  </style>
+</head>
+<body>
+  <main>
+    <div style="font-size:56px">☁️</div>
+    <h1>인터넷에 연결되어 있지 않습니다</h1>
+    <p>연결이 복구되면 최신 날씨를 다시 불러옵니다.</p>
+    <button onclick="location.reload()">다시 시도</button>
+  </main>
+</body>
+</html>

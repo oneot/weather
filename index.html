@@ -4,6 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#b8dff3">
+  <meta name="description" content="AI 에이전트와 함께 보는 실시간 날씨">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Weather">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link
     rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>"
@@ -4631,6 +4638,11 @@
     window.addEventListener("resize", () => selectHour(state.selectedIndex, false));
     window.addEventListener("pagehide", () => state.subscription?.unsubscribe?.());
     bindLiquidDrag(); setContext("서울","오늘","forecast"); loadInitialWeather(); connectAgent();
+  </script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(console.error));
+    }
   </script>
 </body>
 </html>
