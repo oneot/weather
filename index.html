@@ -4109,7 +4109,20 @@
   </div>
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
+  <script>
+    /* webchat.js는 Direct Line 연결 직전에만 불러옵니다. 오프라인에서 페이지 로딩을 막지 않기 위해서입니다. */
+    function loadWebChat() {
+      if (window.WebChat) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        const timer = setTimeout(() => { script.remove(); reject(new Error("webchat.js load timeout")); }, 10000);
+        script.src = "https://cdn.botframework.com/botframework-webchat/latest/webchat.js";
+        script.onload = () => { clearTimeout(timer); resolve(); };
+        script.onerror = () => { clearTimeout(timer); reject(new Error("webchat.js load failed")); };
+        document.head.appendChild(script);
+      });
+    }
+  </script>
   <script>
     /* Azure Function endpoints */
     const TOKEN_ENDPOINT = "https://weather-agent-joowon-c0gfe7d3ggfmf2f0.koreacentral-01.azurewebsites.net/api/directline-token";
@@ -4345,6 +4358,7 @@
         if (!payload.userId || !String(payload.userId).startsWith("dl_")) throw new Error("Direct Line userId missing");
         state.userId = payload.userId;
         state.subscription?.unsubscribe?.();
+        await loadWebChat();
         state.directLine = window.WebChat.createDirectLine({ token });
         state.subscription = state.directLine.activity$.subscribe({
           next: activity => { const isBot = activity.from?.role === "bot" || (activity.from?.id && activity.from.id !== state.userId);
